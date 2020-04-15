@@ -4,10 +4,14 @@ import time
 from datetime import datetime
 import paho.mqtt.client as mqtt
 import argparse
+import multiprocessing
 import threading
 import configparser
 import pytz
 from tzlocal import get_localzone
+import signal
+
+_RUNNING = True
 
 def remove_html_tags(text):
     """Remove html tags from a string"""
@@ -249,9 +253,13 @@ class Generator:
             "@402": dt.hour,
             "@403": dt.minute
         }
+        print("1")
         self.lock.acquire()
+        print("2")
         results = self.session.post(self.login_site + self.cgi_script, data)
-        self.lock.acquire()
+        print("3")
+        self.lock.release()
+        print("4")
 
     def check_time(self, delta_min=0, sync=False):
         self.get_data()
@@ -265,8 +273,9 @@ class Generator:
 
     def push_button(self, parameters):
         self.lock.acquire()
-        self.session.get(self.login_site + self.cgi_script + "?" + parameters)
+        results = self.session.get(self.login_site + self.cgi_script + "?" + parameters)
         self.lock.release()
+        print(results.status_code)
 
     def standby_disable(self):
         self.push_button('@385=0')
@@ -345,10 +354,13 @@ class Generator:
             self.engine_stop()
 
     def on_message_standby_enable(self, mosq, obj, msg):
+        print("msg")
+        print(msg.payload)
         if msg.payload == "True":
             self.standby_enable()
         elif msg.payload == "False":
             self.standby_disable()
+            print("disable")
 
     def on_message_engine_start(self, mosq, obj, msg):
         if msg.payload == "True":
@@ -362,12 +374,47 @@ def get_local_time():
     now = tz.localize(now)
     return now
 
-def time_sync(generator,timeSync):
-    while True:
-        time.sleep(timeSync*60)
-        generator.check_time(5,True)
+def time_sync(generator, time_delay):
+    time_start = time.time()
+    while _RUNNING:
+        time_now = time.time()
+        time_diff = time_now - time_start
+        if  time_diff >= 10:
+            generator.check_time(5,True)
+            print("time2")
+            time_start = time.time()
+
+
+def update(generator, mqtt, time_delay):
+    time_start = time.time()
+    while _RUNNING:
+        time_now = time.time()
+        time_diff = time_now - time_start
+        if time_diff >= time_delay:
+            print("hello")
+            generator.publish_mqtt(mqtt)
+            time.sleep(time_delay)
+
+
+class ServiceExit(Exception):
+    """
+    Custom exception which is used to trigger the clean exit
+    of all running threads and the main program.
+    """
+    pass
+ 
+ 
+def service_shutdown(signum, frame):
+    print('Caught signal %d' % signum)
+    _RUNNING = False
+    raise ServiceExit
 
 def main():
+
+    # Register the signal handlers
+    signal.signal(signal.SIGTERM, service_shutdown)
+    signal.signal(signal.SIGINT, service_shutdown)
+
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -375,26 +422,31 @@ def main():
     parser.add_argument('-c', '--config', default='./config.ini', help='The path to the config file')
 
     args = parser.parse_args()
-
+    print("start")
     config = configparser.ConfigParser()
     config.read(args.config)
 
     cummins = Generator(config['CUMMINS']['Host'], config['CUMMINS']['Username'], config['CUMMINS']['Password'])
-
     mqtt_client = mqtt.Client("cummins")
-
+    time_thread = multiprocessing.Process(target=time_sync, args=(cummins,int(config['CUMMINS']['TimeSyncMin'])*60))
+    update_thread = multiprocessing.Process(target=update, args=(cummins, mqtt_client, 1))
     mqtt_client.connect(config['MQTT']['Host'])
     cummins.subscribe_mqtt(mqtt_client)
     mqtt_client.loop_start()
-    time_thread = threading.Thread(target=time_sync, args=(cummins,int(config['CUMMINS']['TimeSyncMin']),))
-
     time_thread.start()
+    update_thread.start()
 
-    while True:
-        cummins.publish_mqtt(mqtt_client)
-        time.sleep(1)
+    try:
+        while True:
+            time.sleep(1)
 
+    except ServiceExit:
+       None
+    time_thread.join()
+    update_thread.join()
     mqtt_client.loop_stop()
+    mqtt_client.disconnect()
+    print('Exiting main program')
 
 
 if __name__ == "__main__":

@@ -128,114 +128,118 @@ class Generator:
         s = self.session.get(self.login_site+self.data_page)
         self.lock.release()
 
-        status = remove_html_tags(s.text).split()
-
-        dt = "{} {}, {} {}:{}".format(status[9], status[10], status[11], status[0], status[1])
-        self.last_datetime = self.datetime
-        self.datetime = datetime.strptime(dt, "%B %d, %Y %H:%M")
-
-        self.last_batt_volt = self.batt_volt
-        self.batt_volt = float(status[2])/10
-
-        self.last_load_1 = self.load_1
-        self.load_1 = int(status[4])
-
-        self.last_load_2 = self.load_2
-        self.load_2 = int(status[5])
-
-        self.last_volts = self.volts
-        self.volts = int(status[6])
-
-        self.last_freq = self.freq
-        self.freq = int(status[7])
-
-        self.last_eng_hrs = self.eng_hrs
-        self.eng_hrs = round(float(status[8])/60, 1)
-
-        self.last_fault = self.fault
-        self.fault = status[13]
-
-        self.last_event = self.event
-        self.event = status[14]
-
-        self.last_event_desc = self.event_desc
-        self.event_desc = status[15]
-
-        self.last_fault_desc = self.fault_desc
-        self.fault_desc = status[16]
-
-        self.last_auto_mode = self.auto_mode
-        self.auto_mode = status[17]
-
-        lcd_status = int(status[12])
-
-        self.last_utility_present = self.utility_present
-        if lcd_status & 0x01:
-            self.utility_present = True
+        if s.status_code != 200:
+            print('HTTP', s.status_code)
         else:
-            self.utility_present = False
 
-        self.last_utility_connected = self.utility_connected
-        if lcd_status & 0x02:
-            self.utility_connected = True
-        else:
-            self.utility_connected = False
+            status = remove_html_tags(s.text).split()
 
-        self.last_running = self.running
-        if lcd_status & 0x0C:
-            self.running = True
-        else:
-            self.running = False
+            dt = "{} {}, {} {}:{}".format(status[9], status[10], status[11], status[0], status[1])
+            self.last_datetime = self.datetime
+            self.datetime = datetime.strptime(dt, "%B %d, %Y %H:%M")
 
-        self.last_standby = self.standby
-        if lcd_status & 0x10:
-            self.standby = False
-        else:
-            self.standby = True
+            self.last_batt_volt = self.batt_volt
+            self.batt_volt = float(status[2])/10
 
-        self.last_action_required = self.action_required
-        if lcd_status & 0x60:
-            self.action_required = True
-        else:
-            self.action_required = False
+            self.last_load_1 = self.load_1
+            self.load_1 = int(status[4])
 
-        self.last_exercising = self.exercising
-        if self.running and self.utility_connected:
-            self.exercising = True
-        else:
-            self.exercising = False
+            self.last_load_2 = self.load_2
+            self.load_2 = int(status[5])
 
-        status_code = int(status[3])
+            self.last_volts = self.volts
+            self.volts = int(status[6])
 
-        self.last_status = self.status
-        if status_code == 0 or status_code == 1:
-            self.status = "Stopped"
-        elif status_code == 2:
-            self.status = "Starting"
-        elif status_code == 3:
-            self.status = "Starting"
-        elif status_code == 4:
-            self.status = "Running"
-        elif status_code == 5:
-            self.status = "Priming"
-        elif status_code == 6:
-            self.status = "Fault {}".format(self.fault)
-        elif status_code == 7:
-            self.status = "Eng.Only"
-        elif status_code == 8:
-            self.status = "TestMode"
-        elif status_code == 9:
-            self.status = "Volt Adj"
-        elif status_code == 20:
-            self.status = "** Config Mode **"
-        elif status_code == 21:
-            self.status = "Cycle crank pause"
-        elif status_code == 22:
-            self.status = "Exercising"
-        elif status_code == 23:
-            self.status = "Engine Cooldown"
-        else:
-            self.status = "Unknown status - {}".format(status[1])
+            self.last_freq = self.freq
+            self.freq = int(status[7])
+
+            self.last_eng_hrs = self.eng_hrs
+            self.eng_hrs = round(float(status[8])/60, 1)
+
+            self.last_fault = self.fault
+            self.fault = status[13]
+
+            self.last_event = self.event
+            self.event = status[14]
+
+            self.last_event_desc = self.event_desc
+            self.event_desc = status[15]
+
+            self.last_fault_desc = self.fault_desc
+            self.fault_desc = status[16]
+
+            self.last_auto_mode = self.auto_mode
+            self.auto_mode = status[17]
+
+            lcd_status = int(status[12])
+
+            self.last_utility_present = self.utility_present
+            if lcd_status & 0x01:
+                self.utility_present = True
+            else:
+                self.utility_present = False
+
+            self.last_utility_connected = self.utility_connected
+            if lcd_status & 0x02:
+                self.utility_connected = True
+            else:
+                self.utility_connected = False
+
+            self.last_running = self.running
+            if lcd_status & 0x0C:
+                self.running = True
+            else:
+                self.running = False
+
+            self.last_standby = self.standby
+            if lcd_status & 0x10:
+                self.standby = False
+            else:
+                self.standby = True
+
+            self.last_action_required = self.action_required
+            if lcd_status & 0x60:
+                self.action_required = True
+            else:
+                self.action_required = False
+
+            self.last_exercising = self.exercising
+            if self.running and self.utility_connected:
+                self.exercising = True
+            else:
+                self.exercising = False
+
+            status_code = int(status[3])
+
+            self.last_status = self.status
+            if status_code == 0 or status_code == 1:
+                self.status = "Stopped"
+            elif status_code == 2:
+                self.status = "Starting"
+            elif status_code == 3:
+                self.status = "Starting"
+            elif status_code == 4:
+                self.status = "Running"
+            elif status_code == 5:
+                self.status = "Priming"
+            elif status_code == 6:
+                self.status = "Fault {}".format(self.fault)
+            elif status_code == 7:
+                self.status = "Eng.Only"
+            elif status_code == 8:
+                self.status = "TestMode"
+            elif status_code == 9:
+                self.status = "Volt Adj"
+            elif status_code == 20:
+                self.status = "** Config Mode **"
+            elif status_code == 21:
+                self.status = "Cycle crank pause"
+            elif status_code == 22:
+                self.status = "Exercising"
+            elif status_code == 23:
+                self.status = "Engine Cooldown"
+            else:
+                self.status = "Unknown status - {}".format(status[1])
 
     def set_time(self, dt):
         data = {
@@ -246,9 +250,8 @@ class Generator:
             "@403": dt.minute
         }
         self.lock.acquire()
-        self.session.post(self.login_site + self.cgi_script, data)
+        results = self.session.post(self.login_site + self.cgi_script, data)
         self.lock.acquire()
-
 
     def check_time(self, delta_min=0, sync=False):
         self.get_data()
@@ -356,8 +359,7 @@ class Generator:
 def get_local_time():
     now=datetime.now()
     tz = pytz.timezone('America/New_York')
-    now = now.astimezone(tz)
-    print(now)
+    now = tz.localize(now)
     return now
 
 def time_sync(generator,timeSync):

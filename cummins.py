@@ -10,8 +10,13 @@ import configparser
 import pytz
 from tzlocal import get_localzone
 import signal
+import logging
+import sys
+
 
 _RUNNING = True
+logger = logging.getLogger()
+
 
 def remove_html_tags(text):
     """Remove html tags from a string"""
@@ -128,12 +133,19 @@ class Generator:
     def get_data(self):
 
         # Navigate to the next page and scrape the data
+        logger.debug('Reaching out to Generator for status update')
         self.lock.acquire()
-        s = self.session.get(self.login_site+self.data_page)
+        try:
+            s = self.session.get(self.login_site+self.data_page)
+        except:
+            logger.debug("Failed to connect to Generator")
+            self.lock.release()
+            return False
         self.lock.release()
 
         if s.status_code != 200:
-            print('HTTP', s.status_code)
+            logger.debug('HTTP', s.status_code)
+            return False
         else:
 
             status = remove_html_tags(s.text).split()
@@ -244,6 +256,7 @@ class Generator:
                 self.status = "Engine Cooldown"
             else:
                 self.status = "Unknown status - {}".format(status[1])
+        return True
 
     def set_time(self, dt):
         data = {
@@ -254,8 +267,14 @@ class Generator:
             "@403": dt.minute
         }
         self.lock.acquire()
-        results = self.session.post(self.login_site + self.cgi_script, data)
+        try:
+            results = self.session.post(self.login_site + self.cgi_script, data)
+        except:
+            self.lock.release()
+            logger.debug("Failed to connect to Generator")
+            return False
         self.lock.release()
+        return True
 
     def check_time(self, delta_min=0, sync=False):
         self.get_data()
@@ -269,8 +288,14 @@ class Generator:
 
     def push_button(self, parameters):
         self.lock.acquire()
-        results = self.session.get(self.login_site + self.cgi_script + "?" + parameters)
+        try:
+            results = self.session.get(self.login_site + self.cgi_script + "?" + parameters)
+        except:
+            logger.debug("Failed to connect to Generator")
+            self.lock.release()
+            return False
         self.lock.release()
+        return True
 
     def standby_disable(self):
         self.push_button('@385=0')
@@ -288,7 +313,11 @@ class Generator:
         self.push_button('@242=3')
 
     def publish_mqtt(self,mqtt_client):
+        logger.debug('Getting Data')
+
         self.get_data()
+
+        logger.debug('Publishing MQTT Messages')
 
         if self.datetime != self.last_datetime:
             mqtt_client.publish(self.mqtt_prefix+self.mqtt_time, self.datetime.strftime("%H:%M"), 0, True)
@@ -388,48 +417,60 @@ class ServiceExit(Exception):
  
  
 def service_shutdown(signum, frame):
-    print('Caught signal %d' % signum)
+    logger.debug('Caught signal %d' % signum)
     _RUNNING = False
     raise ServiceExit
 
 def main():
-
-    # Register the signal handlers
-    signal.signal(signal.SIGTERM, service_shutdown)
-    signal.signal(signal.SIGINT, service_shutdown)
-
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-
-    parser.add_argument('-c', '--config', default='./config.ini', help='The path to the config file')
-
-    args = parser.parse_args()
-    print("start")
-    config = configparser.ConfigParser()
-    config.read(args.config)
-
-    cummins = Generator(config['CUMMINS']['Host'], config['CUMMINS']['Username'], config['CUMMINS']['Password'])
-    mqtt_client = mqtt.Client("cummins")
-    time_thread = multiprocessing.Process(target=time_sync, args=(cummins,int(config['CUMMINS']['TimeSyncMin'])*60))
-    mqtt_client.connect(config['MQTT']['Host'])
-    cummins.subscribe_mqtt(mqtt_client)
-    mqtt_client.loop_start()
-    time_thread.start()
-
     try:
-        while True:
-            time.sleep(1)
-            cummins.publish_mqtt(mqtt_client)
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
 
-    except ServiceExit:
-       None
-    _RUNNING = False
-    time_thread.join()
-    mqtt_client.loop_stop()
-    mqtt_client.disconnect()
-    print('Exiting main program')
+        # Register the signal handlers
+        signal.signal(signal.SIGTERM, service_shutdown)
+        signal.signal(signal.SIGINT, service_shutdown)
 
+        parser = argparse.ArgumentParser(
+            description=__doc__,
+            formatter_class=argparse.RawDescriptionHelpFormatter)
+
+        parser.add_argument('-c', '--config', default='./config.ini', help='The path to the config file')
+        parser.add_argument('-d', '--debug',  action='store_true', default=False, help='Prints out log')
+
+        args = parser.parse_args()
+        if args.debug:
+            logger.setLevel(logging.DEBUG)
+        logger.debug('Logger Started')
+
+        config = configparser.ConfigParser()
+        config.read(args.config)
+        logger.debug('Connecting to Generator')
+        cummins = Generator(config['CUMMINS']['Host'], config['CUMMINS']['Username'], config['CUMMINS']['Password'])
+        mqtt_client = mqtt.Client("cummins")
+        logger.debug('Starting Time Thread')
+        time_thread = multiprocessing.Process(target=time_sync, args=(cummins,int(config['CUMMINS']['TimeSyncMin'])*60))
+        mqtt_client.connect(config['MQTT']['Host'])
+        cummins.subscribe_mqtt(mqtt_client)
+        mqtt_client.loop_start()
+
+        try:
+            time_thread.start()
+
+            while True:
+                time.sleep(1)
+                cummins.publish_mqtt(mqtt_client)
+
+        except ServiceExit:
+            _RUNNING = False
+            time_thread.join()
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+        logger.debug('Exiting main program')
+    except:
+        sys.exit()
 
 if __name__ == "__main__":
     main()

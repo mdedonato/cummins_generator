@@ -271,7 +271,6 @@ class Generator:
         self.lock.acquire()
         results = self.session.get(self.login_site + self.cgi_script + "?" + parameters)
         self.lock.release()
-        print(results.status_code)
 
     def standby_disable(self):
         self.push_button('@385=0')
@@ -289,7 +288,6 @@ class Generator:
         self.push_button('@242=3')
 
     def publish_mqtt(self,mqtt_client):
-
         self.get_data()
 
         if self.datetime != self.last_datetime:
@@ -378,17 +376,7 @@ def time_sync(generator, time_delay):
         if  time_diff >= time_delay:
             generator.check_time(5,True)
             time_start = time.time()
-
-
-def update(generator, mqtt, time_delay):
-    time_start = time.time()
-    while _RUNNING:
-        time_now = time.time()
-        time_diff = time_now - time_start
-        if time_diff >= time_delay:
-            generator.publish_mqtt(mqtt)
-            time.sleep(time_delay)
-
+            print("time")
 
 class ServiceExit(Exception):
     """
@@ -423,21 +411,20 @@ def main():
     cummins = Generator(config['CUMMINS']['Host'], config['CUMMINS']['Username'], config['CUMMINS']['Password'])
     mqtt_client = mqtt.Client("cummins")
     time_thread = multiprocessing.Process(target=time_sync, args=(cummins,int(config['CUMMINS']['TimeSyncMin'])*60))
-    update_thread = multiprocessing.Process(target=update, args=(cummins, mqtt_client, 1))
     mqtt_client.connect(config['MQTT']['Host'])
     cummins.subscribe_mqtt(mqtt_client)
     mqtt_client.loop_start()
     time_thread.start()
-    update_thread.start()
 
     try:
         while True:
             time.sleep(1)
+            cummins.publish_mqtt(mqtt_client)
 
     except ServiceExit:
        None
+    _RUNNING = False
     time_thread.join()
-    update_thread.join()
     mqtt_client.loop_stop()
     mqtt_client.disconnect()
     print('Exiting main program')

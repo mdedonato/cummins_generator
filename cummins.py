@@ -348,13 +348,10 @@ class Generator:
             self.engine_stop()
 
     def on_message_standby_enable(self, mosq, obj, msg):
-        print("msg")
-        print(msg.payload)
         if "True" in msg.payload:
             self.standby_enable()
         elif "False" in msg.payload:
             self.standby_disable()
-            print("disable")
 
     def on_message_engine_start(self, mosq, obj, msg):
         if "True" in msg.payload:

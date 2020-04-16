@@ -253,13 +253,9 @@ class Generator:
             "@402": dt.hour,
             "@403": dt.minute
         }
-        print("1")
         self.lock.acquire()
-        print("2")
         results = self.session.post(self.login_site + self.cgi_script, data)
-        print("3")
         self.lock.release()
-        print("4")
 
     def check_time(self, delta_min=0, sync=False):
         self.get_data()
@@ -379,9 +375,8 @@ def time_sync(generator, time_delay):
     while _RUNNING:
         time_now = time.time()
         time_diff = time_now - time_start
-        if  time_diff >= 10:
+        if  time_diff >= time_delay:
             generator.check_time(5,True)
-            print("time2")
             time_start = time.time()
 
 
@@ -391,7 +386,6 @@ def update(generator, mqtt, time_delay):
         time_now = time.time()
         time_diff = time_now - time_start
         if time_diff >= time_delay:
-            print("hello")
             generator.publish_mqtt(mqtt)
             time.sleep(time_delay)
 

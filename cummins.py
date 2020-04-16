@@ -350,13 +350,10 @@ class Generator:
 
     def on_message_standby_enable(self, mosq, obj, msg):
         msg.payload = msg.payload.decode("utf-8")
-        print("msg")
-        print(msg.payload)
         if msg.payload == "True":
             self.standby_enable()
         elif msg.payload == "False":
             self.standby_disable()
-            print("disable")
 
     def on_message_engine_start(self, mosq, obj, msg):
         msg.payload = msg.payload.decode("utf-8")

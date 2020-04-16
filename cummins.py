@@ -342,24 +342,24 @@ class Generator:
         mqtt_client.subscribe(self.mqtt_prefix+self.mqtt_engine_start)
 
     def on_message_engine_exercise(self, mosq, obj, msg):
-        if msg.payload == "True":
+        if "True" in msg.payload:
             self.engine_exercise()
-        elif msg.payload == "False":
+        elif "False" in msg.payload:
             self.engine_stop()
 
     def on_message_standby_enable(self, mosq, obj, msg):
         print("msg")
         print(msg.payload)
-        if msg.payload == "True":
+        if "True" in msg.payload:
             self.standby_enable()
-        elif msg.payload == "False":
+        elif "False" in msg.payload:
             self.standby_disable()
             print("disable")
 
     def on_message_engine_start(self, mosq, obj, msg):
-        if msg.payload == "True":
+        if "True" in msg.payload:
             self.engine_start()
-        elif msg.payload == "False":
+        elif "False" in msg.payload:
             self.engine_stop()
 
 def get_local_time():

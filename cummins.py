@@ -406,7 +406,6 @@ def time_sync(generator, time_delay):
         if  time_diff >= time_delay:
             generator.check_time(5,True)
             time_start = time.time()
-            print("time")
 
 class ServiceExit(Exception):
     """
